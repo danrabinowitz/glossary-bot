@@ -50,10 +50,13 @@ spec:
           value: ${glossary-bot-db.DATABASE_PRIVATE_URL}
         - key: MCP_AUTH_TOKEN
           scope: RUN_TIME
-          value: ""
+          value: ""  # required: openssl rand -hex 32
           type: SECRET
         - key: MCP_ALLOWED_HOSTS
           scope: RUN_TIME
-          value: ""  # generated <app>.ondigitalocean.app hostname
+          value: ""  # required: generated <app>.ondigitalocean.app hostname
+        - key: MCP_ALLOWED_ORIGINS
+          scope: RUN_TIME
+          value: ""  # optional: browser MCP client origins
   databases:
     - name: glossary-bot-db

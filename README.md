@@ -22,7 +22,8 @@ All Configuration is done by env variables
 The read-only [MCP server](#query-the-glossary-over-mcp) has its own variables:
 
  * MCP_AUTH_TOKEN - Static bearer token required by the MCP endpoint. The server refuses to start without it.
- * MCP_ALLOWED_HOSTS - Comma-separated `Host` values accepted by the MCP server. Required in deployment. Include `host:*` variants when a port may be present.
+ * MCP_ALLOWED_HOSTS - Required. Comma-separated `Host` values accepted by the MCP server. Include `host:*` variants when a port may be present; the server refuses to start without it.
+ * MCP_ALLOWED_ORIGINS - Optional. Comma-separated `Origin` values for browser-based MCP clients. Non-browser agents do not send an `Origin` header.
  * MCP_USER_NAME - Name recorded in the interactions table for MCP lookups. Defaults to `mcp`.
  * PORT - Port for the MCP server. Defaults to 8080 (Digital Ocean injects this for services).
 
@@ -73,8 +74,11 @@ The app spec (`.do/deploy.template.yaml`) includes a `glossary-mcp` service alon
 * `DATABASE_URL`: the database's **private** URL (same app/VPC)
 * `MCP_AUTH_TOKEN`: a secret generated with `openssl rand -hex 32`
 * `MCP_ALLOWED_HOSTS`: the generated `<app>.ondigitalocean.app` hostname (and its custom domain, if any)
+* `MCP_ALLOWED_ORIGINS`: only needed for browser-based MCP clients (for example `http://localhost:6274` for MCP Inspector); leave empty for CLI agents
 
-Requests will return `421 Invalid Host header` until `MCP_ALLOWED_HOSTS` contains the public hostname.
+Requests will return `421 Invalid Host header` until `MCP_ALLOWED_HOSTS` contains the public hostname. The service refuses to start if either `MCP_AUTH_TOKEN` or `MCP_ALLOWED_HOSTS` is unset, so a misconfigured deployment fails its health check instead of serving a broken endpoint.
+
+Keep `instance_count: 1`: Streamable HTTP sessions are held in process memory. Set `stateless_http=True` in `streamable_http_app()` before scaling out.
 
 ### Connect an agent
 

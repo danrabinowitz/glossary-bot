@@ -7,6 +7,7 @@ separate process; both share the same database.
 import logging
 import os
 from contextlib import asynccontextmanager
+from threading import BoundedSemaphore
 from typing import Literal
 
 import uvicorn
@@ -20,11 +21,20 @@ from starlette.routing import Mount, Route
 from . import __version__, mcp_tools
 from .db import make_engine
 from .mcp_auth import BearerAuthMiddleware
+from .mcp_config import (
+    allowed_hosts_from_env,
+    allowed_origins_from_env,
+    auth_token_from_env,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DEFAULT_ALLOWED_HOSTS = ("localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*")
+# Sync tools run in the SDK's thread pool (~40 threads) while SQLAlchemy's
+# default pool is 5 + 10 overflow. Cap concurrent DB work below the pool size so
+# bursts of searches wait for a permit instead of exhausting the pool.
+MAX_CONCURRENT_DB_CALLS = 10
+_db_limiter = BoundedSemaphore(MAX_CONCURRENT_DB_CALLS)
 
 engine = make_engine()
 MCP_USER_NAME = os.getenv("MCP_USER_NAME", "mcp")
@@ -46,7 +56,7 @@ def lookup_term(term: str) -> dict:
     Follows 'see' / 'see also' aliases and returns the canonical definition.
     If the term is not found, returns fuzzy suggestions.
     """
-    with Session(engine) as session:
+    with _db_limiter, Session(engine) as session:
         return mcp_tools.lookup_term(session, term, user_name=MCP_USER_NAME)
 
 
@@ -56,7 +66,7 @@ def search_terms(query: str, limit: int = 20) -> dict:
 
     Returns matching terms with their definitions. ``limit`` is capped at 50.
     """
-    with Session(engine) as session:
+    with _db_limiter, Session(engine) as session:
         return mcp_tools.search_terms(session, query, limit=limit)
 
 
@@ -70,37 +80,15 @@ def list_terms(
 
     Supports limit/offset pagination; ``limit`` is capped at 50.
     """
-    with Session(engine) as session:
+    with _db_limiter, Session(engine) as session:
         return mcp_tools.list_terms(session, limit=limit, offset=offset, sort=sort)
 
 
 @mcp.tool()
 def glossary_stats() -> dict:
     """Return the number of terms, distinct definers, and total lookups."""
-    with Session(engine) as session:
+    with _db_limiter, Session(engine) as session:
         return mcp_tools.glossary_stats(session)
-
-
-def allowed_hosts_from_env() -> list[str]:
-    hosts = [
-        host.strip()
-        for host in os.getenv("MCP_ALLOWED_HOSTS", "").split(",")
-        if host.strip()
-    ]
-    if not hosts:
-        logger.warning(
-            "MCP_ALLOWED_HOSTS is not set; only localhost hosts will be accepted. "
-            "Set it to the public hostname when deployed."
-        )
-        return list(DEFAULT_ALLOWED_HOSTS)
-    return hosts
-
-
-def auth_token_from_env() -> str:
-    token = os.getenv("MCP_AUTH_TOKEN", "")
-    if not token:
-        raise RuntimeError("MCP_AUTH_TOKEN must be set to serve the MCP endpoint")
-    return token
 
 
 async def health(request):
@@ -111,7 +99,8 @@ def create_app():
     mcp_app = mcp.streamable_http_app(
         streamable_http_path="/mcp",
         transport_security=TransportSecuritySettings(
-            allowed_hosts=allowed_hosts_from_env()
+            allowed_hosts=allowed_hosts_from_env(),
+            allowed_origins=allowed_origins_from_env(),
         ),
     )
 
