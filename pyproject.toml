@@ -73,8 +73,8 @@ version = {attr = "gloss.__version__"}
 readme = {file = "README.md"}
 
 [tool.setuptools.packages.find]
-# All the following settings are optional:
-where = ["gloss"]  # ["."] by default
+where = ["."]
+include = ["gloss*"]
 
 [tool.black]
 line-length = 125
