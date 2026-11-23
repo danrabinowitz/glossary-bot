@@ -1,7 +1,7 @@
 [project]
 name = "glossary-bot"
 description = "Glossary Slack Bot"
-requires-python = ">=3"
+requires-python = ">=3.10"
 dynamic = ["version", "readme"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -36,11 +36,14 @@ maintainers = [
 dependencies = [
   "gunicorn==26.2.0",
   "alembic==1.20.1",
+  "mcp==2.3.0",
   "psycopg2-binary==2.9.13",
   "mysqlclient==2.3.0",
   "slack-bolt==1.30.0",
+  "starlette==1.10.0",
   "thefuzz==0.22.1",
   "thefuzz[speedup]==0.22.1",
+  "uvicorn==0.54.0",
 ]
 
 [project.urls]
